@@ -27,6 +27,7 @@ unfocus_modal() {
 
 	if [ -n "$id" ]; then
 		yabai -m window --focus $id &>/dev/null
+	else
 		yabai -m window --focus mouse &>/dev/null
 	fi
 }
