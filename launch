@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+# A rofi-like script launcher made with fzf and modal.
+#
+# Dependencies:
+# - bash 4.0+ (for associative array support)
+# - fzf: https://github.com/junegunn/fzf
+# - modal: ./modal
+#
+# Usage:
+# - Run launch and select a script with fzf.
+# - Press Enter to execute the selected script.
+# - 'quit' exits the loop (rename if 'quit' conflicts with your system).
+#
+# Configuration:
+# - Add scripts that are in your $PATH to the SCRIPTS associative array.
+#   - key: An alias for the script to be displayed by fzf.
+#   - value: A string with either one value or two comma-separated values.
+#     - value[0]: The executable name of the script.
+#     - value[1]: (optional) 'hide' to hide the modal after executing the script.
+#
+# Example configuration:
+#   declare -r -A SCRIPTS=(
+#   	["contacts"]="abook"
+#   	["app"]="app,hide"
+#   )
+
+declare -r -A SCRIPTS=(
+	["app"]="app,hide"
+	["bookmarks"]="bookmarks,hide"
+	["comment"]="comment,hide"
+	["contacts"]="abook"
+	["define"]="define,hide"
+	["eject"]="eject"
+	["keys"]="keys"
+	["quit"]="quit"
+	["search"]="search,hide"
+	["snippets"]="snippets"
+	["trash"]="empty_trash"
+	["words"]="words"
+)
+
+while true; do
+	clear
+	script=$(
+		printf '%s\n' "${!SCRIPTS[@]}" | sort |
+			fzf --padding=1 --prompt="launch " --reverse
+	)
+	if [[ "$script" == "quit" ]]; then
+		break
+	elif [[ -z "$script" ]]; then
+		continue
+	else
+		"${SCRIPTS[$script]%%,*}"
+		[[ "${SCRIPTS[$script]##*,}" == "hide" ]] && modal
+	fi
+done

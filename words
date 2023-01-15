@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+# Add words to a list of words-to-be-ingnored by a spell checker.
+#
+# Usage:
+# - Run words.
+# - Input space delimited words.
+# - Press enter to add the words to WORD_FILE.
+
+WORD_FILE=$HOME/.words.txt
+
+# TODO: Uncomment the following colors if they're not defined in your environment.
+# BLUE='\033[0;34m'
+# BOLD='\033[1m'
+# NC='\033[0m'
+
+prompt=$(echo -e "\n  ${BLUE}${BOLD}words${NC} ")
+
+read -p "$prompt" -a words
+
+[[ -z "${words// /}" ]] && exit 0
+
+for word in "${words[@]}"; do
+	echo "$word" | awk '{print tolower($0)}' >>$WORD_FILE
+done
+
+sort -o $WORD_FILE $WORD_FILE

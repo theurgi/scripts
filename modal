@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+# A toggling floating terminal window made with kitty and yabai for macOS.
+# Can be used with ./launch to create a rofi-like launcher.
+#
+# Dependencies:
+# - yabai: https://github.com/koekeishiya/yabai
+# - kitty: https://sw.kovidgoyal.net/kitty/
+# - jq: https://stedolan.github.io/jq/
+# - (optional external hotkey) skhd: https://github.com/koekeishiya/skhd
+#
+# Usage:
+# - Set TITLE to a unique window title.
+# - Execute this script to create/toggle the modal.
+# - Optionally, define a hotkey with skhd to execute this script.
+#
+# TODO:
+# - Make modal size and position configurable.
+
+# A window title for the modal.
+# Make sure this is unique among all other window titles in yabai's tree.
+TITLE="kitty_yabai_modal"
+
+unfocus_modal() {
+	# Get the id of the first window in yabai's tree that's not the modal.
+	local id=$(yabai -m query --windows --space | jq -e '.[] | select(.title!="'"$TITLE"'") | .id' | head -n 1)
+
+	if [ -n "$id" ]; then
+		yabai -m window --focus $id &>/dev/null
+		yabai -m window --focus mouse &>/dev/null
+	fi
+}
+
+show_modal() {
+	local id=$(get_modal_id)
+	yabai -m window --focus $id
+	yabai -m window --move abs:350:245
+	yabai -m window --resize abs:755:425
+}
+
+hide_modal() (
+	local id=$(get_modal_id)
+
+	while modal_is_visible; do
+		yabai -m window --focus $id &>/dev/null
+		yabai -m window --resize abs:1:1 &>/dev/null
+		yabai -m window --move abs:1:900 &>/dev/null
+	done
+
+	unfocus_modal
+)
+
+create_modal() {
+	yabai -m rule --add app="^kitty$" title="$TITLE" \
+		layer=above \
+		manage=off \
+		sticky=on
+
+	kitty --title="$TITLE" -d ~ &>/dev/null
+
+	show_modal
+}
+
+modal_exists() {
+	yabai -m query --windows | jq -e '.[] | select(.title=="'"$TITLE"'")' &>/dev/null
+}
+
+get_modal_id() {
+	local id=$(yabai -m query --windows | jq -e '.[] | select(.title=="'"$TITLE"'") | .id')
+	echo "$id"
+}
+
+# Modal is considered visible if its width is greater than 1.
+modal_is_visible() {
+	yabai -m query --windows | jq -e '.[] | select(.title=="'"$TITLE"'") | select(.frame.w>1)' &>/dev/null
+}
+
+main() {
+	if modal_exists; then
+		if modal_is_visible; then
+			hide_modal
+		else
+			show_modal
+		fi
+	else
+		create_modal
+	fi
+}
+
+main

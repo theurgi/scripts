@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+# Select and play audio from a library of youtube playlist files using fzf and mpv.
+#
+# Dependencies:
+# - fzf: https://github.com/junegunn/fzf
+# - mpv: https://github.com/mpv-player/mpv
+# - yt-dlp: https://github.com/yt-dlp/yt-dlp
+#
+# Usage:
+# - Set ARTISTS to the root directory containing directories of artists or mixes.
+# - Run the script.
+#
+# Example ARTISTS directory:
+#   ARTISTS
+#   ├── artist1
+#   │   ├── album1.txt
+#   │   └── album2.txt
+#   └── mixes
+#       ├── mix1.txt
+#       └── mix2.txt
+#
+# Example album1.txt (a playlist url):
+#   https://www.youtube.com/playlist?list=1234567890
+#
+# Example mix1.txt (multiple video URLs, one per line):
+#   https://www.youtube.com/watch?v=1234567890
+#   https://www.youtube.com/watch?v=0987654321
+
+# Path to the main directory which contains directories of artists or mixes.
+ARTISTS="$HOME/media/audio/music/stream"
+
+main() {
+	# Select an artist from ARTISTS using fzf.
+	artist=$(
+		find "$ARTISTS" -mindepth 1 -maxdepth 1 -type d |
+			sed "s|$ARTISTS/||" |
+			sort -f |
+			fzf --reverse
+	)
+
+	[[ -z "$artist" ]] && exit 0
+
+	# Select a playlist file from the selected artist using fzf.
+	playlist=$(
+		find "$ARTISTS/$artist" -mindepth 1 -maxdepth 1 -type f |
+			sed "s|$ARTISTS/$artist/||" |
+			sort -f |
+			fzf --prompt="$artist " --reverse
+	)
+
+	[[ -z "$playlist" ]] && exit 0
+
+	# Print artist and playlist.
+	printf "\n$artist - $playlist\n"
+
+	# Play the selected playlist.
+	mpv \
+		--playlist="$ARTISTS/$artist/$playlist" \
+		--vid=no \
+		--msg-level=cplayer=error,playlist=no \
+		--term-playing-msg='\n${playlist-pos-1} - ${media-title}'
+}
+
+main

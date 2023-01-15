@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+# A simple and effective way to manage your code snippets.
+#
+# Features:
+# - Use whatever editor you want.
+# - Your file system is the database.
+# - Search, view, and copy snippets from your terminal with fzf and bat.
+# - Use any version control, backup, or sync tool you want.
+# - Syntax highlighted previews courtesy of bat.
+#
+# Dependencies:
+# - fzf: https://github.com/junegunn/fzf
+# - bat: https://github.com/sharkdp/bat
+#
+# Usage:
+# - Set SNIPPETS_DIR to the the directory containing your snippet files.
+# - A snippet file is just a regular source file with any extension storing a single code snippet.
+# - Run this script to find and copy a snippet to the clipboard.
+#
+# Example SNIPPETS_DIR structure:
+#   SNIPPETS_DIR
+#   ├── typescript
+#   │   ├── memoize.ts
+#   │   └── throttle.ts
+#   └── node
+#       ├── import_json_assert.ts
+#       └── import_json_create_require.ts
+
+SNIPPETS_DIR=~/notebook/snippets
+
+# Change to directory so that fzf displays relative paths.
+# It's also possible to use `find -printf "%P"` but this requires GNU find which is not installed by
+# default on macOS. See: https://superuser.com/a/1325327
+if ! [ $PWD = $SNIPPETS_DIR ]; then
+	cd $SNIPPETS_DIR
+fi
+
+main() {
+	if [[ "$OSTYPE" == "darwin"* ]]; then
+		CLIPBOARD="pbcopy"
+	elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+		CLIPBOARD="xclip -selection clipboard"
+	else
+		echo "Unsupported operating system: $OSTYPE"
+		exit 1
+	fi
+
+	SNIPPET=$(
+		find * -type f -not -name ".*" |
+			fzf --preview 'bat --color=always --plain {}' --preview-window=up
+	)
+
+	[[ -z "$SNIPPET" ]] && exit 0
+
+	cat "$SNIPPET" | $CLIPBOARD
+}
+
+main

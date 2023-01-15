@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+# Search the web from the command line. For macOS and Linux.
+# Designed to be used with ./modal and ./launch.
+#
+# Dependencies:
+# - bash (>= 4.0)
+# - fzf: https://github.com/junegunn/fzf
+#
+# Usage:
+# - Configure search engines in the SEARCH_ENGINES associative array.
+# - Run search.
+# - Select a search engine with fzf.
+# - Enter a search query and press enter.
+# - The search results will open in your default browser.
+# - Empty queries are ignored.
+#
+# Example SEARCH_ENGINES entry:
+#  ["google"]="https://www.google.com/search?q="
+
+# TODO: Uncomment the following colors if they're not defined in your environment.
+# BLUE='\033[0;34m'
+# BOLD='\033[1m'
+# NC='\033[0m'
+
+declare -A SEARCH_ENGINES=(
+	["arch wiki"]="https://wiki.archlinux.org/index.php?search="
+	["github"]="https://github.com/search?q="
+	["mdn"]="https://developer.mozilla.org/en-US/search?q="
+)
+
+main() {
+	local fzf_input=""
+
+	for search_engine in "${!SEARCH_ENGINES[@]}"; do
+		fzf_input+="$search_engine"
+		fzf_input+=$'\n'
+	done
+
+	fzf_input=${fzf_input%$'\n'} # Remove the extra newline.
+
+	local selected_engine=$(echo "$fzf_input" | fzf --prompt="search " --reverse)
+
+	[[ -z "$selected_engine" ]] && exit 0
+
+	prompt=$(echo -e "${BLUE}${BOLD}search $selected_engine${NC} ")
+
+	# Read in the search query. Exit if the query is empty.
+	clear
+	read -r -p "$prompt" query || exit 0
+	[[ -z "$query" ]] && exit 0
+	[[ "$query" =~ ^[[:space:]]*$ ]] && exit 0
+	clear
+
+	# Trim leading and trailing whitespace.
+	query="${query#"${query%%[![:space:]]*}"}"
+
+	if [[ "$OSTYPE" == "darwin"* ]]; then
+		open "${SEARCH_ENGINES[$selected_engine]}$query"
+		exit 0
+	elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+		xdg-open "${SEARCH_ENGINES[$selected_engine]}$query"
+		exit 0
+	else
+		echo "Unsupported operating system: $OSTYPE"
+		exit 1
+	fi
+}
+
+main

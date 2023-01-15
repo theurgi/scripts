@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+# Eject mounted volumes on macOS.
+#
+# Dependencies:
+# - fzf: https://github.com/junegunn/fzf
+#
+# Usage:
+# - Run eject.
+# - Select volumes to eject with fzf (multi-select with tab).
+# - Press enter to eject the volume(s).
+#
+# TODO:
+# - Test disk image detach.
+
+ignore_volumes=("x")
+
+selected_volumes=$(
+	ls /Volumes | grep -v "${ignore_volumes[@]}" |
+		fzf --prompt="eject " --reverse --multi |
+		sed 's/\/Volumes\///'
+)
+
+[[ -z "$selected_volumes" ]] && exit 0
+
+for volume in $selected_volumes; do
+	if [[ -f "/Volumes/$volume/.disk_label" ]]; then
+		hdiutil detach "/Volumes/$volume"
+	else
+		diskutil eject "/Volumes/$volume"
+	fi
+done

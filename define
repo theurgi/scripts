@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+# CLI to launch macOS' Dictionary app with a provided search word.
+
+# TODO: Uncomment the following colors if they're not defined in your environment.
+# BLUE='\033[0;34m'
+# BOLD='\033[1m'
+# NC='\033[0m'
+
+prompt=$(echo -e "\n  ${BLUE}${BOLD}define${NC} ")
+
+read -p "$prompt" word
+
+[[ -z "$word" ]] && exit 0
+
+open "dict://$word"

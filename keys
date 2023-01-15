@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+# A searchable central store for keybindings.
+#
+# Dependencies:
+# - fzf: https://github.com/junegunn/fzf
+#
+# Usage:
+# - Set KEYS_DIR to the directory containing your key files.
+# - A key file is a plain text file containing a single keybinding.
+# - Run keys to lookup a keybinding with fzf.
+# - Press Enter or escape to exit.
+#
+# Example KEYS_DIR:
+#   KEYS_DIR
+#   ├── firefox
+#   │   ├── show_all_bookmarks
+#   │   └── show_all_history
+#   └── vim
+#       ├── copy_line
+#       └── write_and_quit
+#
+# Example key file (use whatever syntax you like):
+#   shift + cmd + o
+
+KEYS_DIR=~/notebook/keys
+
+# Change to directory so that fzf displays relative paths.
+# It's also possible to use `find -printf "%P"` but this requires GNU find which is not installed by
+# default on macOS. See: https://superuser.com/a/1325327
+if ! [ $PWD = $KEYS_DIR ]; then
+	cd $KEYS_DIR
+fi
+
+find * -type f -not -name ".*" |
+	fzf --preview 'cat {}' --preview-window=up >/dev/null ||
+	exit 0

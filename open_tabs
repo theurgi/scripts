@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+# Open all URLs in a file in new tabs in your default browser.
+#
+# Usage: open_tabs <file>
+#
+# Example file:
+#  https://www.example.com
+#  https://www.youtube.com/watch?v=dQw4w9WgXcQ
+
+while read URL; do
+	open $URL
+done <$1

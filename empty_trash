@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+# Empty the trash on macOS and Linux.
+
+if [ "$(uname)" == "Darwin" ]; then
+	rm -rf ~/.Trash/*
+elif [ "$(uname)" == "Linux" ]; then
+	rm -rf ~/.local/share/Trash/files/*
+else
+	echo "Unsupported OS: $(uname)"
+	exit 1
+fi
