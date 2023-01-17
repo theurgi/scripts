@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+
+# s_name (standard name)
+# Batch rename files and directories to a standard format.
+# A simple wrapper around detox.
+#
+# Dependencies:
+# - detox: https://github.com/dharple/detox
+# - CONFIG_FILE: Set to the path of a detoxrc file.
+#   - For results as shown in the example below, copy or reference:
+#     - https://github.com/theurgi/dotfiles/blob/main/dot_config/detox/detoxrc
+#     - https://github.com/theurgi/dotfiles/blob/main/dot_config/detox/modified.safe.tbl
+#   - Run `man detoxrc` for additional information.
+#
+# Example results:
+#   _FOO--Bar_.txt      ->  foo_bar.txt
+#   Dots.Are.Allowed.rs ->  dots.are.allowed.rs
+#   War&Peace.pdf       ->  war_and_peace.pdf
+#   ~#$*!<my>,FILE.txt  ->  my_file.txt
+#
+# Usage:
+# - See `help` function below.
+
+CONFIG_FILE="$HOME/.config/detox/detoxrc"
+
+help() {
+	echo "s_name (standard name)"
+	echo "Batch rename files and directories to a standard format."
+	echo "A simple wrapper around detox."
+	echo ""
+	echo "USAGE:"
+	echo "  cd path/to/rename"
+	echo "  s_name [OPTIONS]"
+	echo ""
+	echo "OPTIONS: s_name [-rch]"
+	echo "  -r, --recursive  Rename all files and directories under the current directory."
+	echo "  -c, --commit     Commit changes."
+	echo "  -h, --help       Show this help message."
+	echo ""
+	echo "NOTE:"
+	echo "  Unless -c is specified, only a dry run will occur."
+}
+
+s_name() {
+	if [[ $args == *"-c"* ]]; then
+		args=${args//-c/} # remove all instances of -c from args
+		detox . -f "$CONFIG_FILE" $args
+	else
+		detox . -f "$CONFIG_FILE" --dry-run $args
+	fi
+}
+
+main() {
+	if [[ $# -eq 0 ]]; then
+		if [[ -z $(s_name) ]]; then
+			echo "No files or directories found to rename."
+			echo "Run 's_name -h' for help."
+		else
+			s_name
+		fi
+		exit 0
+	else
+		for arg in "$@"; do
+			case $arg in
+			-r | --recursive)
+				args="$args -r"
+				shift
+				;;
+			-c | --commit)
+				args="$args -c"
+				shift
+				;;
+			-h | --help)
+				help
+				exit 0
+				;;
+			*)
+				echo "Unknown option: $arg"
+				help
+				exit 1
+				;;
+			esac
+		done
+	fi
+
+	s_name "$args"
+}
+
+main "$@"

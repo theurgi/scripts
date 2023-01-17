@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+
+# Enter a word -> select from a list of possible spelling corrections -> copy it to the clipboard.
+# Supports Linux and macOS.
+#
+# Dependencies:
+# - datamuse API
+# - curl
+# - jq
+# - fzf
+#
+# Usage:
+# - Run spell.
+# - Enter a word to spell check.
+# - Select a word from the list using fzf to copy it to the clipboard.
+#
+# TODO:
+# - Fall back to didyoumean if no internet connection.
+
+# TODO: Uncomment the following colors if they're not defined in your environment.
+# BLUE='\033[0;34m'
+# BOLD='\033[1m'
+# NC='\033[0m'
+
+prompt=$(echo -e "\n  ${BLUE}${BOLD}spell${NC} ")
+
+read -p "$prompt" word
+
+[[ -z "$word" ]] && exit 0
+
+response=$(curl -s "https://api.datamuse.com/words?sp=$word")
+
+suggestions=($(echo $response | jq -r '.[].word'))
+
+if [ ${#suggestions[@]} -eq 0 ]; then
+	echo "No suggestions found."
+	exit 0
+fi
+
+suggestion=$(printf '%s \n' "${suggestions[@]}" | fzf)
+
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+	echo -n $suggestion | xclip -selection clipboard
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+	echo -n $suggestion | pbcopy
+else
+	echo "Unsupported operating system: $OSTYPE"
+	exit 1
+fi
