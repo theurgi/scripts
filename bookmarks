@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Search Buku bookmarks with fzf and open them in the browser.
+# Search Buku bookmarks with fzf and open them in the browser
+# or copy their URL to the clipboard.
 #
 # Dependencies:
 # - buku: https://github.com/jarun/buku
@@ -11,76 +12,117 @@
 # - Set BUKU_DATABASE to the path of your Buku database.
 # - Run bookmarks.
 # - Search for bookmarks with fzf.
-# - Press Enter to open the selected bookmark in your default browser or escape to exit.
-#
-# TODO:
-# - Create keybind for copying (instead of opening) bookmark during fzf search.
-# - Make colors configurable.
+# - Keybindings:
+# 	- Enter: open the selected bookmark in your default browser.
+#   - Ctrl + y: copy the selected bookmark's URL to the clipboard.
+#   - Esc: exit.
 
-BUKU_DATABASE="$HOME/.local/share/buku/bookmarks.db"
+BUKU_DATABASE_PATH="$HOME/.local/share/buku/bookmarks.db"
 
-for arg in "$@"; do
-	[ "$arg" = "--copy" ] || [ "$arg" = "-c" ] && copy=1
-done
+# TODO: Uncomment the following colors if they're not defined in your environment.
+# BLUE="\033[34m"
+# CYAN="\033[36m"
+# NC="\033[0m"
 
-main() {
-	bookmark_id=(
-		$(
-			sqlite3 -separator $'\t' "$BUKU_DATABASE" "SELECT id,url,tags FROM bookmarks" |
-				# Format bookmarks for fzf search.
-				awk -F $'\t' '{
-					# Color IDs blue.
-					gsub(/^[0-9]+/, "\033[34m&\033[0m", $1);
-					# Remove protocol and www. from URLs.
-					gsub(/https?:\/\//,"",$2);
-					gsub(/www\./,"",$2);
-					# Truncate URLs to 30 characters and add cyan ellipsis.
-					((length($2) > 30)) && $2 = substr($2, 1, 27) "\033[36m...\033[0m"
-					# Remove leading and trailing commas from tags.
-					gsub(/(^,|,$)/,"",$3);
-					# Color commas separating tags cyan.
-					gsub(/,/, "\033[36m,\033[0m", $3);
-					# Pipe database entries to fzf.
-					printf "%s\t%-30s\t%s\n", $1, $2, $3
-		  	}' |
-				# Compose fzf preview window.
-				fzf --ansi --preview "
-					echo {} |
-					# Extract ID from fzf output.
-					cut -d $'\t' -f 1 |
-					# Pass ID to buku and print JSON.
-					xargs -I {} buku -p {} -j |
-					# Remove extraneous Buku output.
-					tail -n +2 |
-					# Format and colorize JSON.
-					jq -r 'def colors:
-						{
-							\"blue\": \"\u001b[34m\",
-							\"green\": \"\u001b[32m\",
-							\"cyan\": \"\u001b[36m\",
-							\"white\": \"\u001b[37m\",
-						};
-						colors.blue + .title,
-						colors.green + .description,
-						colors.cyan + .tags,
-						colors.white + .uri' |
-					# Remove commas from tags.
-					tr ',' ' ' |
-					# Wrap lines.
-					fold -w $(($(tput cols) - 5)) -s
-		    " --preview-window=up,wrap |
-				# Extract ID from fzf output.
-				cut -d $'\t' -f 1
-		)
-	)
+ID_COLOR="$BLUE"
+TAG_COLOR="$CYAN"
 
-	[[ -z $bookmark_id ]] && exit 0
-
-	if [[ -n $copy ]]; then
-		buku -p ${bookmark_id[@]} -j | jq -r '.uri' | tr -d '\n' | pbcopy
-	else
-		buku --open ${bookmark_id[@]}
-	fi
+get_url() {
+	sqlite3 "$BUKU_DATABASE_PATH" "SELECT url FROM bookmarks WHERE id=$1"
 }
 
-main
+format_entries() {
+	echo "$1" | awk \
+		-v ID_COLOR="$ID_COLOR" \
+		-v TAG_COLOR="$TAG_COLOR" \
+		-v NC="$NC" \
+		-F $'\t' '{
+		# Color IDs blue.
+		gsub(/^[0-9]+/, ID_COLOR "&" NC, $1);
+
+    # Remove protocol and www. from URLs.
+    gsub(/https?:\/\//,"",$2);
+    gsub(/www\./,"",$2);
+
+    # Truncate URLs to 30 characters and add cyan ellipsis.
+    ((length($2) > 30)) && $2 = substr($2, 1, 27) TAG_COLOR "..." NC;
+
+    # Remove leading and trailing commas from tags.
+    gsub(/(^,|,$)/,"",$3);
+
+    # Color commas separating tags cyan.
+    gsub(/,/, TAG_COLOR "," NC, $3);
+
+    # Print with tabular format.
+    printf "%s\t%-30s\t%s\n", $1, $2, $3
+	}'
+}
+
+# schema: id,desc,metadata,url,tags
+database_entries=$(
+	format_entries "$(
+		sqlite3 -separator $'\t' "$BUKU_DATABASE_PATH" 'SELECT id,url,tags FROM bookmarks'
+	)"
+)
+
+bookmark_id=$(
+	echo "$database_entries" |
+		fzf --ansi --multi --preview "
+		echo {} |
+
+		# Get ID from fzf output.
+		cut -d $'\t' -f 1 |
+
+		# Pass ID to buku and print JSON.
+		xargs -I {} buku -p {} -j |
+
+		# Remove extraneous Buku output.
+		tail -n +2 |
+
+		# Colorize data.
+		jq -r 'def colors: {
+			\"blue\": \"\u001b[34m\",
+			\"cyan\": \"\u001b[36m\",
+			\"green\": \"\u001b[32m\",
+			\"white\": \"\u001b[37m\",
+		};
+
+		colors.blue + .title,
+		colors.green + .description,
+		colors.cyan + .tags,
+		colors.white + .uri' |
+
+		# Remove commas from tags.
+		tr ',' ' ' |
+
+		# Wrap lines.
+		fold -w $(($(tput cols) - 5)) -s
+
+	" --preview-window=up,wrap \
+			--bind "ctrl-y:execute-silent(echo {} |
+
+			  # Get ID from fzf output.
+				cut -d $'\t' -f 1 |
+
+				# Pass ID to buku and print JSON.
+				xargs -I {} buku -p {} -j |
+
+				# Remove extraneous Buku output.
+				tail -n +2 |
+
+				# Get URL.
+				jq -r .uri |
+
+				# Remove newlines.
+				tr -d '\n' |
+
+				# Copy to clipboard.
+				pbcopy)+abort" |
+
+		# Get ID from fzf output.
+		cut -d $'\t' -f 1
+)
+
+[[ -z $bookmark_id ]] && exit 0
+
+open "$(get_url "$bookmark_id")"
