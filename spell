@@ -1,43 +1,38 @@
 #!/usr/bin/env bash
 
-# Enter a word -> select from a list of possible spelling corrections -> copy it to the clipboard.
-# Supports Linux and macOS.
+# Enter a word ⮐
+# View definitions & select from a list of spelling corrections  ⮐
+# Copy it to the clipboard ⚡️
+#
+# For Linux and macOS.
 #
 # Dependencies:
 # - datamuse API
-# - curl
-# - jq
 # - fzf
-#
-# Usage:
-# - Run spell.
-# - Enter a word to spell check.
-# - Select a word from the list using fzf to copy it to the clipboard.
-#
-# TODO:
-# - Fall back to didyoumean if no internet connection.
+# - jq
+# - curl
 
-# TODO: Uncomment the following colors if they're not defined in your environment.
-# BLUE='\033[0;34m'
-# BOLD='\033[1m'
-# NC='\033[0m'
-
-prompt=$(echo -e "\n  ${BLUE}${BOLD}spell${NC} ")
-
-read -p "$prompt" word
+word=$(echo "" | fzf \
+	--padding=1 \
+	--print-query \
+	--prompt="spell " \
+	--reverse)
 
 [[ -z "$word" ]] && exit 0
 
-response=$(curl -s "https://api.datamuse.com/words?sp=$word")
-
-suggestions=($(echo $response | jq -r '.[].word'))
-
-if [ ${#suggestions[@]} -eq 0 ]; then
-	echo "No suggestions found."
-	exit 0
-fi
-
-suggestion=$(printf '%s \n' "${suggestions[@]}" | fzf)
+suggestion=$(
+	curl -s "https://api.datamuse.com/words?sp=$word" |
+		jq -e -r '.[].word' |
+		fzf \
+			--padding=1 \
+			--preview-window=up,wrap \
+			--reverse \
+			--preview="
+				curl -s 'https://api.dictionaryapi.dev/api/v2/entries/en/{}' |
+				jq -e -r '.[0].meanings[0].definitions[0].definition' 2>/dev/null || \
+				echo 'No definition found.'
+			"
+)
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
 	echo -n $suggestion | xclip -selection clipboard
