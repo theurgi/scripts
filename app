@@ -34,7 +34,7 @@ get_applications() {
 }
 
 main() {
-	app=$(get_applications | fzf --prompt="app " --reverse)
+	app=$(get_applications | fzf --padding=1 --prompt="app " --reverse)
 
 	[[ -z "$app" ]] && exit 0
 

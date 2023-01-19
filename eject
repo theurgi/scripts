@@ -17,7 +17,7 @@ ignore_volumes=("x")
 
 selected_volumes=$(
 	ls /Volumes | grep -v "${ignore_volumes[@]}" |
-		fzf --prompt="eject " --reverse --multi |
+		fzf --multi --padding=1 --prompt="eject " --reverse |
 		sed 's/\/Volumes\///'
 )
 
