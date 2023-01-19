@@ -9,14 +9,11 @@
 
 WORD_FILE=$HOME/.words.txt
 
-# TODO: Uncomment the following colors if they're not defined in your environment.
-# BLUE='\033[0;34m'
-# BOLD='\033[1m'
-# NC='\033[0m'
-
-prompt=$(echo -e "\n  ${BLUE}${BOLD}words${NC} ")
-
-read -p "$prompt" -a words
+words=($(echo "" | fzf \
+	--padding=1 \
+	--print-query \
+	--prompt="words " \
+	--reverse))
 
 [[ -z "${words// /}" ]] && exit 0
 
