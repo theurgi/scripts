@@ -31,6 +31,7 @@ declare -r -A SCRIPTS=(
 	["comment"]="comment,hide"
 	["contacts"]="abook"
 	["define"]="define,hide"
+	["spell"]="spell"
 	["eject"]="eject"
 	["keys"]="keys"
 	["quit"]="quit"
