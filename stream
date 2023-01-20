@@ -36,7 +36,7 @@ main() {
 		find "$ARTISTS" -mindepth 1 -maxdepth 1 -type d |
 			sed "s|$ARTISTS/||" |
 			sort -f |
-			fzf --reverse
+			fzf --padding=1 --prompt="stream " --reverse
 	)
 
 	[[ -z "$artist" ]] && exit 0
@@ -46,7 +46,7 @@ main() {
 		find "$ARTISTS/$artist" -mindepth 1 -maxdepth 1 -type f |
 			sed "s|$ARTISTS/$artist/||" |
 			sort -f |
-			fzf --prompt="$artist " --reverse
+			fzf --padding=1 --prompt="$artist " --reverse
 	)
 
 	[[ -z "$playlist" ]] && exit 0
