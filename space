@@ -1,0 +1,280 @@
+#!/usr/bin/env node
+// @ts-check
+
+// Create new workspaces and and launch applications with a few keystrokes.
+// For macOS.
+//
+// Note:
+// - The current state of this script is very specific to my personal tooling and workflow. It is
+//   therefore published primarily as a reference and a proof of concept. If the source isn't alien
+//   to you, it shouldn't be too difficult to adapt to your own needs. If you have any questions,
+//   just open an issue, I'm happy to help.
+//
+// Dependencies:
+// - code: https://code.visualstudio.com/
+// - codium: https://vscodium.com/
+// - fzf: https://github.com/junegunn/fzf
+// - kitty: https://sw.kovidgoyal.net/kitty/
+// - nnn: https://github.com/jarun/nnn
+// - yabai: https://github.com/koekeishiya/yabai
+// - findutils: https://www.gnu.org/software/findutils/
+//   - brew install findutils
+//   - In .zshrc or .bashrc: export PATH="/usr/local/opt/findutils/libexec/gnubin:$PATH"
+//
+// TODO:
+// - Test if detaching spawned processes allows modal to hide faster.
+
+const { spawn, execSync } = require('child_process')
+const nodePath = require('path')
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────── Spaces ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** @type {{ [space: string]: () => Promise<void> }} */
+const SPACES = {
+	develop: async () => {
+		const editors = ['code', 'codium'] // Command line executable names.
+
+		/**
+		 * Project directories.
+		 * A directory object can represent a single project directory (depth: 0) or a directory of
+		 * project directories (depth: n > 0). If the latter, the value of the depth property
+		 * corresponds to how many levels of subdirectories to recurse to get to individual project
+		 * roots. The editor property is optional and can be set to a specific editor to use for that
+		 * directory.
+		 */
+		/** @type {{ [directory: string]: { path: string, depth: number, editor?: string } }} */
+		const directories = {
+			dotfiles: {
+				path: '/Users/user/.local/share/chezmoi',
+				depth: 0,
+			},
+			notebook: {
+				path: '/Users/user/notebook',
+				depth: 0,
+				editor: 'codium',
+			},
+			reap: {
+				path: '/Users/user/reap',
+				depth: 3,
+			},
+			scripts: {
+				path: '/Users/user/scripts',
+				depth: 0,
+			},
+		}
+
+		const selectedDirectory = await fzf(Object.keys(directories), ['--prompt', 'directory '])
+
+		let selectedDirectoryPath, titleFragment
+
+		if (directories[selectedDirectory].depth) {
+			const { depth, path } = directories[selectedDirectory]
+
+			const projectRoots = (
+				await find(path, ['-maxdepth', `${depth}`, '-mindepth', `${depth}`, '-type', 'd'])
+			)
+				.trim()
+				.split('\n')
+
+			selectedDirectoryPath = nodePath.join(
+				path,
+				await fzf(
+					projectRoots.map((root) => subpath(root, -depth)),
+					['--prompt', 'project ']
+				)
+			)
+
+			titleFragment = subpath(selectedDirectoryPath, -1)
+		} else {
+			selectedDirectoryPath = directories[selectedDirectory].path
+			titleFragment = selectedDirectory
+		}
+
+		const editor =
+			directories[selectedDirectory].editor || (await fzf(editors, ['--prompt', 'editor ']))
+
+		/** @type {KittyConfig} */
+		let kittyConfig = {
+			...defaultKittyConfig,
+			title: `kitty_${titleFragment}`,
+			dir: selectedDirectoryPath,
+			cmd: 'nnn -a',
+		}
+
+		switch (editor) {
+			case 'code':
+				kittyConfig = {
+					...kittyConfig,
+					cmd: 'nnn -a -e',
+					env: 'VISUAL=code',
+				}
+				break
+			case 'codium':
+				kittyConfig = {
+					...kittyConfig,
+					env: 'VISUAL=codium',
+				}
+				break
+		}
+
+		newSpace(`develop_${titleFragment}`)
+		newKitty(kittyConfig)
+
+		execSync(`${editor} -n ${selectedDirectoryPath}`)
+
+		const kittyId = (await yabai(['-m', 'query', '--windows', '--space'])).find(
+			(window) => window.title === kittyConfig.title
+		).id
+
+		execSync(`yabai -m window ${kittyId} --focus`)
+		execSync('yabai -m window --resize right:-490:0')
+	},
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────── Helper Functions ────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} KittyConfig
+ * @property {string} title - The title of the new kitty window.
+ * @property {string} dir - The directory to open in the new kitty window.
+ * @property {string} [env] - The environment variables to set in the new kitty window.
+ * @property {string} [cmd] - The command to run in the new kitty window.
+ */
+
+/** @type {KittyConfig} */
+const defaultKittyConfig = {
+	title: `kitty_${Date.now()}`,
+	dir: '~',
+}
+
+/**
+ * Create a new kitty window.
+ * @param {KittyConfig} config
+ * @returns {void}
+ */
+const newKitty = ({ title, dir, env, cmd } = defaultKittyConfig) => {
+	const options = [env ? `--env ${env}` : '', cmd ? `${cmd}` : '']
+	const kitty = `kitty --single-instance --session - cat`
+	const session = `launch --hold --title ${title} --cwd ${dir} ${options.join(' ')}`
+
+	execSync(`${kitty} <<<"${session}"`)
+}
+
+/**
+ * Create a new macOS space using yabai.
+ * @param {string} name - The name of the new space.
+ * @returns {void}
+ */
+const newSpace = (name) => {
+	execSync(`yabai -m space --create`)
+	execSync(`yabai -m space --focus last`)
+	execSync(`yabai -m space --label ${name}`)
+}
+
+/**
+ * Spawn fzf as a child process and return a promise that resolves with the selected item(s).
+ * @param {string[]} selections The items to select from.
+ * @param {string[]} fzfOptions The options to pass to fzf. See `man fzf` for more info.
+ * @returns {Promise<string>}
+ */
+const fzf = (selections, fzfOptions) => {
+	const baseOptions = ['--reverse', '--padding=1']
+
+	const fzf = spawn('fzf', [...baseOptions, ...fzfOptions], {
+		stdio: ['pipe', 'pipe', 'inherit'],
+	})
+
+	fzf.stdout.setEncoding('utf-8')
+	fzf.stdin.write(selections.join('\n'))
+	fzf.stdin.end()
+
+	return new Promise((resolve) => {
+		fzf.stdout.on('data', (selection) => {
+			resolve(selection.trim())
+		})
+	})
+}
+
+/**
+ * Spawn Gnu find as a child process and return a promise that resolves with the output.
+ * @param {string} path - The absolute path to the directory to search.
+ * @param {string[]} args - The arguments to pass to `find`.
+ * @returns {Promise<string>} - The output of `find`.
+ */
+const find = (path, args) => {
+	const find = spawn('find', [path, ...args], {
+		stdio: ['pipe', 'pipe', 'inherit'],
+	})
+
+	find.stdout.setEncoding('utf-8')
+
+	return new Promise((resolve) => {
+		find.stdout.on('data', (data) => {
+			resolve(data)
+		})
+	})
+}
+
+/**
+ * Spawn yabai as a child process and return a promise that resolves with the output.
+ * @param {string[]} args - The arguments to pass to `yabai`.
+ * @returns {Promise<object>} - The output of `yabai`.
+ */
+const yabai = (args) => {
+	const yabai = spawn('yabai', args, {
+		stdio: ['pipe', 'pipe', 'inherit'],
+	})
+
+	yabai.stdout.setEncoding('utf-8')
+
+	yabai.on('exit', (code) => {
+		if (code) {
+			console.error(`\nyabai exited with code ${code}`)
+			process.exit(code)
+		}
+	})
+
+	return new Promise((resolve) => {
+		yabai.stdout.on('data', (data) => {
+			resolve(JSON.parse(data))
+		})
+	})
+}
+
+/**
+ * Get a subpath of a file path.
+ * @param {string} path - The path to get the subpath of.
+ * @param {number} n - The path segment quantifier. Can be positive or negative. See examples.
+ * @returns {string} - The subpath.
+ * @example subpath('/Users/user', 0) // '/Users/user'
+ * @example subpath('/Users/user', 1) // 'Users/user'
+ * @example subpath('/Users/user', 2) // 'user'
+ * @example subpath('/Users/user', 3) // ''
+ * @example subpath('/Users/user', -1) // 'user'
+ * @example subpath('/Users/user', -2) // 'Users/user'
+ * @example subpath('/Users/user', -3) // '/Users/user'
+ */
+const subpath = (path, n) => {
+	const pathSegments = path.split('/')
+	return pathSegments.slice(n).join('/')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────── Main ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+const main = (async () => {
+	const actions = ['create', 'destroy']
+	const action = await fzf(actions, ['--prompt', 'space action '])
+
+	if (action === 'create') {
+		const selectedSpace = await fzf(Object.keys(SPACES), ['--prompt', 'space '])
+		SPACES[selectedSpace]()
+	} else if (action === 'destroy') {
+		// TODO: Destroy space
+	}
+})()
