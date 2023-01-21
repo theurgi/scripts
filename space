@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 
-// Create new workspaces and and launch applications with a few keystrokes.
+// Create new workspaces and launch applications with a few keystrokes.
 // For macOS.
 //
 // Note:
@@ -100,14 +100,14 @@ const SPACES = {
 			...defaultKittyConfig,
 			title: `kitty_${titleFragment}`,
 			dir: selectedDirectoryPath,
-			cmd: 'nnn -a',
+			cmd: 'nnn -A',
 		}
 
 		switch (editor) {
 			case 'code':
 				kittyConfig = {
 					...kittyConfig,
-					cmd: 'nnn -a -e',
+					cmd: 'nnn -A -e',
 					env: 'VISUAL=code',
 				}
 				break
