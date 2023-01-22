@@ -19,13 +19,13 @@ APPLICATION_PATHS=(
 get_applications() {
 	if [[ "$OSTYPE" == "darwin"* ]]; then
 		for path in "${APPLICATION_PATHS[@]}"; do
-			find "$path" -name '*.app' -maxdepth 2 -type d -print0 | xargs -0 -I {} basename {} .app
+			find "$path" -maxdepth 2 -name '*.app' -type d -print0 | xargs -0 -I {} basename {} .app
 		done
 	elif
 		[[ "$OSTYPE" == "linux-gnu" ]]
 	then
 		for path in "${APPLICATION_PATHS[@]}"; do
-			find "$path" -name '*.desktop' -maxdepth 2 -type d -print0 | xargs -0 -I {} basename {} .desktop
+			find "$path" -maxdepth 2 -name '*.desktop' -type d -print0 | xargs -0 -I {} basename {} .desktop
 		done
 	else
 		echo "Unsupported OS: $OSTYPE"
