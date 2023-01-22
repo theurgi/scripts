@@ -57,7 +57,7 @@ create_modal() {
 		manage=off \
 		sticky=on
 
-	kitty --title="$TITLE" -d ~ &>/dev/null
+	kitty --single-instance --title="$TITLE" --directory ~ &>/dev/null
 
 	show_modal
 }
