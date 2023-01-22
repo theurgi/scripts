@@ -21,8 +21,9 @@
 //   - brew install findutils
 //   - In .zshrc or .bashrc: export PATH="/usr/local/opt/findutils/libexec/gnubin:$PATH"
 //
-// TODO:
-// - Test if detaching spawned processes allows modal to hide faster.
+// TODO
+// - Rename space.
+// - Auto label unlabeled spaces.
 
 const { spawn, execSync } = require('child_process')
 const nodePath = require('path')
@@ -95,37 +96,36 @@ const SPACES = {
 		const editor =
 			directories[selectedDirectory].editor || (await fzf(editors, ['--prompt', 'editor ']))
 
-		/** @type {KittyConfig} */
-		let kittyConfig = {
-			...defaultKittyConfig,
-			title: `kitty_${titleFragment}`,
-			dir: selectedDirectoryPath,
-			cmd: 'nnn -A',
-		}
+		const kittyTitle = `kitty_${titleFragment}`
+
+		let kittyConfig = [
+			'@',
+			'launch',
+			'--type',
+			'os-window',
+			'--title',
+			kittyTitle,
+			'--cwd',
+			selectedDirectoryPath,
+		]
 
 		switch (editor) {
 			case 'code':
-				kittyConfig = {
-					...kittyConfig,
-					cmd: 'nnn -A -e',
-					env: 'VISUAL=code',
-				}
+				kittyConfig = [...kittyConfig, '--env', 'VISUAL=code']
 				break
 			case 'codium':
-				kittyConfig = {
-					...kittyConfig,
-					env: 'VISUAL=codium',
-				}
+				kittyConfig = [...kittyConfig, '--env', 'VISUAL=codium']
 				break
 		}
 
 		newSpace(`develop_${titleFragment}`)
-		newKitty(kittyConfig)
+
+		await kitty(kittyConfig, ['nnn', '-A', '-e'])
 
 		execSync(`${editor} -n ${selectedDirectoryPath}`)
 
 		const kittyId = (await yabai(['-m', 'query', '--windows', '--space'])).find(
-			(window) => window.title === kittyConfig.title
+			(window) => window.title === kittyTitle
 		).id
 
 		execSync(`yabai -m window ${kittyId} --focus`)
@@ -144,25 +144,6 @@ const SPACES = {
  * @property {string} [env] - The environment variables to set in the new kitty window.
  * @property {string} [cmd] - The command to run in the new kitty window.
  */
-
-/** @type {KittyConfig} */
-const defaultKittyConfig = {
-	title: `kitty_${Date.now()}`,
-	dir: '~',
-}
-
-/**
- * Create a new kitty window.
- * @param {KittyConfig} config
- * @returns {void}
- */
-const newKitty = ({ title, dir, env, cmd } = defaultKittyConfig) => {
-	const options = [env ? `--env ${env}` : '', cmd ? `${cmd}` : '']
-	const kitty = `kitty --single-instance --session - cat`
-	const session = `launch --hold --title ${title} --cwd ${dir} ${options.join(' ')}`
-
-	execSync(`${kitty} <<<"${session}"`)
-}
 
 /**
  * Create a new macOS space using yabai.
@@ -246,6 +227,35 @@ const yabai = (args) => {
 }
 
 /**
+ * Spawn kitty as a child process and return a promise that resolves with the output.
+ * @param {string[]} args - The arguments to pass to `kitty`.
+ * @param {string[]} [cmd] - The command to run in the new kitty window.
+ * @returns {Promise<object>} - The output of `kitty`.
+ */
+const kitty = (args, cmd) => {
+	const spawnArgs = cmd ? [...args, ...cmd] : args
+
+	const kitty = spawn('kitty', [...spawnArgs], {
+		stdio: ['pipe', 'pipe', 'inherit'],
+	})
+
+	kitty.stdout.setEncoding('utf-8')
+
+	kitty.on('exit', (code) => {
+		if (code) {
+			console.error(`\nkitty exited with code ${code}`)
+			process.exit(code)
+		}
+	})
+
+	return new Promise((resolve) => {
+		kitty.stdout.on('data', (data) => {
+			resolve(JSON.parse(data))
+		})
+	})
+}
+
+/**
  * Get a subpath of a file path.
  * @param {string} path - The path to get the subpath of.
  * @param {number} n - The path segment quantifier. Can be positive or negative. See examples.
@@ -269,12 +279,13 @@ const subpath = (path, n) => {
 
 const main = (async () => {
 	const actions = ['create', 'destroy']
-	const action = await fzf(actions, ['--prompt', 'space action '])
+
+	const action = await fzf(actions, ['--prompt', 'action '])
 
 	if (action === 'create') {
-		const selectedSpace = await fzf(Object.keys(SPACES), ['--prompt', 'space '])
+		const selectedSpace = await fzf(Object.keys(SPACES), ['--prompt', 'create '])
 		SPACES[selectedSpace]()
 	} else if (action === 'destroy') {
-		// TODO: Destroy space
+		await destroySpace()
 	}
 })()
