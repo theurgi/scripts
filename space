@@ -273,6 +273,36 @@ const subpath = (path, n) => {
 	return pathSegments.slice(n).join('/')
 }
 
+/**
+ * Select and destroy spaces.
+ * @returns {Promise<void>}
+ */
+const destroySpace = async () => {
+	const spaces = await yabai(['-m', 'query', '--spaces'])
+	const spaceNames = spaces.map((space) => space.label)
+	const selectedSpace = await fzf(spaceNames, ['--prompt', 'destroy '])
+
+	if (selectedSpace) {
+		const space = spaces.find((space) => space.label === selectedSpace)
+
+		for (const id of space.windows) {
+			const window = await yabai(['-m', 'query', '--windows', `--window`, `${id}`])
+
+			if (window.app !== 'kitty' && !window['is-sticky']) {
+				execSync(`yabai -m window --close ${id}`)
+			} else if (window.app === 'kitty' && !window['is-sticky']) {
+				const kittyWindow = (await kitty(['@', 'ls'])).find(
+					(window) => window.platform_window_id === id
+				)
+				const kittyWindowId = kittyWindow.tabs[0].windows[0].env.KITTY_WINDOW_ID
+				execSync(`kitty @ close-window --match id:${kittyWindowId}`)
+			}
+		}
+
+		execSync(`yabai -m space --destroy ${space.index}`)
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 // ───────────────────────────────────────────── Main ──────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
