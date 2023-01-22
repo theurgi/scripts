@@ -1,0 +1,365 @@
+#!/usr/bin/env node
+// @ts-check
+
+//
+// ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┥ comment ├──────────────────────────────────────┐
+// ┃
+// ┃   Generate heading or divider comments for source code files.
+// ┃   Select options with fzf and the result will be copied to the clipboard.
+// ┃
+// ┠────┤ Dependencies ├─────────────────────────────────────────────────────────
+// ┃
+// ┃    • fzf: https://github.com/junegunn/fzf
+// ┃    • node: https://nodejs.org/en/
+// ┃
+// ├────( Usage )────────────────────────────────────────────────────────────────
+// │
+// │ ┌───────( Configure )──────────────────────
+// │
+// │   • Add the following to your shell config file:
+// │     • `alias comment="node /path/to/comment"`
+// │     • `alias comment="node /path/to/comment.js"`
+// │     • `alias comment="node /path/to/comment.mjs"`
+// │
+// │  ┌───────( Run )─────────────────────────────
+// │  │
+// │  │  • Run `comment` to launch an fzf menu...
+// │  │    ...wrapped text example.
+// │  │
+// │  │  • Select a style of comment and press Enter.
+// │  │
+// │  │  • Select a language and press Enter.
+// │  │  • Select a default length or enter a custom length and press Enter.
+// │  │  • Enter a comment and press Enter.
+// │  │  • The comment will be copied to the clipboard.
+// │  │
+// │  └───────────────────────────────────────────
+// │
+// ├─────( Todo )───────────────────────────────────────────────────────────────────
+// │
+// │   - Add comment styles:
+// │     - triple_line
+// │     - script_header
+// │   - Add singleLine, multiLine, and/or block properties to Language
+// │     object.
+// │   - Fix comment docs.
+// │   - Add default selection for comment and default selections for each language.
+// │
+// └──────────────────────────────────────────────────────────────────────────────────────┘
+//
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────── Core ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @typedef {Object} Language
+ * @property {Object} commentChars
+ * @property {string} commentChars.start
+ * @property {string | null} commentChars.end
+ */
+
+/**
+ * @typedef {Object} Comment
+ * @property {Language} language
+ * @property {number} length
+ * @property {string} style
+ * @property {string} text
+ */
+
+const LINE_CHAR = '─' // Box drawing character U+2500
+
+/** @type {{ [ext: string]: Language }} */
+const LANGUAGES = {
+	C: {
+		commentChars: {
+			start: '//',
+			end: null,
+		},
+	},
+	CSS: {
+		commentChars: {
+			start: '/*',
+			end: '*/',
+		},
+	},
+	Go: {
+		commentChars: {
+			start: '//',
+			end: null,
+		},
+	},
+	HTML: {
+		commentChars: {
+			start: '<!--',
+			end: '-->',
+		},
+	},
+	JavaScript: {
+		commentChars: {
+			start: '//',
+			end: null,
+		},
+	},
+	Lua: {
+		commentChars: {
+			start: '--',
+			end: null,
+		},
+	},
+	Markdown: {
+		commentChars: {
+			start: '<!--',
+			end: '-->',
+		},
+	},
+	Python: {
+		commentChars: {
+			start: '#',
+			end: null,
+		},
+	},
+	Rust: {
+		commentChars: {
+			start: '//',
+			end: null,
+		},
+	},
+	Shell: {
+		commentChars: {
+			start: '#',
+			end: null,
+		},
+	},
+	SQL: {
+		commentChars: {
+			start: '--',
+			end: null,
+		},
+	},
+}
+
+/** @type {{ [commentStyle: string]: (comment: Comment) => string }} */
+const COMMENT_STYLES = {
+	/**
+	 * Generate a single-line comment.
+	 * @param {Comment} comment
+	 * @returns {string}
+	 */
+	singleLine: (comment) => {
+		const { language, length, text } = comment
+		const { start, end } = language.commentChars
+		const commentCharsLength = start.length + (end ? end.length : 0)
+
+		/** @type {1 | 2 | 3 | 4} */
+		let spaces // The number of spaces in a comment
+
+		if (!text.length) {
+			spaces = getCommentSpaces(comment)
+			const repeat = length - commentCharsLength - spaces
+			const line = LINE_CHAR.repeat(repeat)
+			return `${start} ${line}${end ? ` ${end}` : ''}`
+		}
+
+		spaces = getCommentSpaces(comment)
+		const firstHalfLine = getHalfLine(comment, spaces)
+		const parity = (text.length + commentCharsLength + spaces) % 2
+		const secondHalfLine = parity ? firstHalfLine + LINE_CHAR : firstHalfLine
+		return `${start} ${firstHalfLine} ${text} ${secondHalfLine}${end ? ` ${end}` : ''}`
+	},
+	tripleLine: (comment) => {
+		const topAndBottom = COMMENT_STYLES.singleLine({
+			...comment,
+			text: '',
+		})
+		const middle = COMMENT_STYLES.singleLine(comment)
+		return `${topAndBottom}\n${middle}\n${topAndBottom}`
+	},
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────── Core Utils ───────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Generate half of line where a 'line' is `LINE_CHAR.repeat(n)`
+ * @param {Comment} comment
+ * @param {1 | 2 | 3 | 4} spaces The number of spaces in a comment
+ * @returns {string}
+ */
+const getHalfLine = ({ language, length, text }, spaces) => {
+	const { start, end } = language.commentChars
+	const commentCharsLength = start.length + (end ? end.length : 0)
+	let repeat = Math.floor((length - commentCharsLength - spaces - text.length) / 2)
+	return LINE_CHAR.repeat(repeat)
+}
+
+/**
+ * Returns the number of spaces contained in a comment.
+ * @param {Comment} comment
+ * @returns {1 | 2 | 3 | 4}
+ */
+const getCommentSpaces = ({ language, text }) => {
+	const { end } = language.commentChars
+	if (!text.length) return !end ? 1 : 2
+	return !end ? 3 : 4
+}
+
+const getNonLineCharLength = (comment) => {
+	const { language, text } = comment
+	const { start, end } = language.commentChars
+	const commentCharsLength = start.length + (end ? end.length : 0)
+	const spaces = getCommentSpaces(comment)
+	return commentCharsLength + spaces + text.length
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────── CLI ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+const { execSync, spawn } = require('child_process')
+const { exit } = require('process')
+const { platform } = require('os')
+
+const BASE_FZF_OPTIONS = ['--reverse', '--padding=1']
+const LENGTHS = ['50', '60', '70', '80', '100', '120', 'Custom']
+
+/** @type {Comment} */
+const DEFAULT_COMMENT = {
+	language: LANGUAGES.JavaScript,
+	length: 80,
+	style: 'singleLine',
+	text: '',
+}
+
+const cli = async () => {
+	/** @type {Comment} */
+	let comment = {
+		...DEFAULT_COMMENT,
+	}
+
+	const selectedLanguage = await fzf(Object.keys(LANGUAGES), [`--prompt=${'Language '}`])
+
+	comment = {
+		...comment,
+		language: LANGUAGES[selectedLanguage],
+	}
+
+	const selectedStyle = await fzf(Object.keys(COMMENT_STYLES), [`--prompt=${'Comment style '}`])
+
+	comment = {
+		...comment,
+		style: selectedStyle,
+	}
+
+	let selectedLength = await fzf(LENGTHS, [`--prompt=${'Length '}`])
+
+	if (selectedLength === 'Custom') {
+		const minLength = 50
+		const maxLength = 120
+		const prompt = 'Enter custom length '
+
+		selectedLength = await getUserInput({ prompt })
+		const intLength = parseInt(selectedLength)
+
+		while (isNaN(intLength) || intLength < minLength || intLength > maxLength) {
+			selectedLength = await getUserInput({
+				prompt,
+				err: 'Custom length must be a number between 50 and 120',
+			})
+		}
+	}
+
+	comment = {
+		...comment,
+		length: parseInt(selectedLength),
+	}
+
+	const textPrompt = 'Enter comment text '
+	let selectedText = await fzf([''], [`--prompt=${textPrompt}`, '--print-query'])
+
+	if (isTextTooLong(comment)) {
+		while (isTextTooLong(comment)) {
+			selectedText = await getUserInput({
+				prompt: textPrompt,
+				err: `Provided text is too long for a comment of length ${length}`,
+			})
+		}
+	}
+
+	comment = {
+		...comment,
+		text: selectedText,
+	}
+
+	const output = COMMENT_STYLES[comment.style](comment)
+
+	if (platform() === 'darwin') {
+		execSync(`echo "${output}" | pbcopy`)
+	} else if (platform() === 'linux') {
+		execSync(`echo "${output}" | xclip -selection clipboard`)
+	} else {
+		console.error('Unsupported platform')
+		exit(1)
+	}
+
+	console.log('\n  ✔ Copied to clipboard!')
+	execSync('sleep 0.5')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────── CLI Utils ───────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Spawn fzf as a child process and return a promise that resolves with the selected item(s).
+ * @param {string[]} selections The items to select from.
+ * @param {string[]} fzfOptions The options to pass to fzf. See `man fzf` for more info.
+ * @returns {Promise<string>}
+ */
+const fzf = (selections, fzfOptions) => {
+	const fzf = spawn('fzf', [...BASE_FZF_OPTIONS, ...fzfOptions], {
+		stdio: ['pipe', 'pipe', 'inherit'],
+	})
+
+	fzf.stdout.setEncoding('utf-8')
+	fzf.stdin.write(selections.join('\n'))
+	fzf.stdin.end()
+
+	return new Promise((resolve) => {
+		fzf.stdout.on('data', (selection) => {
+			resolve(selection.trim())
+		})
+	})
+}
+
+/**
+ * Get user typed input (input that is not selectable with fzf).
+ * Handles errors by displaying a message in fzf's preview window and
+ * re-prompting the user for input.
+ * @param {Object} options
+ * @param {string} options.prompt The prompt to display in fzf.
+ * @param {string} [options.err] The error message to display in the preview window.
+ * @returns {Promise<string>} The custom length.
+ */
+const getUserInput = async ({ prompt, err }) => {
+	const baseOpts = [...BASE_FZF_OPTIONS, `--prompt=${prompt}`, '--print-query']
+	const errOpts = [`--preview=echo ${err}`, '--preview-window=down:3']
+	return await fzf([''], err ? [...baseOpts, ...errOpts] : baseOpts)
+}
+
+/**
+ * Returns true if user entered comment text is too long.
+ * @param {Comment} comment
+ * @returns {boolean}
+ */
+const isTextTooLong = (comment) => {
+	const nonLineCharLength = getNonLineCharLength(comment)
+	return comment.text.length > comment.length - nonLineCharLength
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────── Main ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+const main = (() => cli())()
