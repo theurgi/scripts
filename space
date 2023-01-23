@@ -20,10 +20,6 @@
 // - findutils: https://www.gnu.org/software/findutils/
 //   - brew install findutils
 //   - In .zshrc or .bashrc: export PATH="/usr/local/opt/findutils/libexec/gnubin:$PATH"
-//
-// TODO
-// - Rename space.
-// - Auto label unlabeled spaces.
 
 const { spawn, execSync } = require('child_process')
 const nodePath = require('path')
@@ -157,6 +153,59 @@ const newSpace = (name) => {
 }
 
 /**
+ * Select and destroy spaces.
+ * @returns {Promise<void>}
+ */
+const destroySpace = async () => {
+	const spaces = await yabai(['-m', 'query', '--spaces'])
+	const spaceNames = spaces.map((space) => space.label)
+	const selectedSpace = await fzf(spaceNames, ['--prompt', 'destroy '])
+
+	if (selectedSpace) {
+		const space = spaces.find((space) => space.label === selectedSpace)
+
+		if (space.windows.length) {
+			for (const id of space.windows) {
+				const window = await yabai(['-m', 'query', '--windows', `--window`, `${id}`])
+
+				if (window.app !== 'kitty' && !window['is-sticky']) {
+					execSync(`yabai -m window --close ${id}`)
+				} else if (window.app === 'kitty' && !window['is-sticky']) {
+					const kittyWindow = (await kitty(['@', 'ls'])).find(
+						(window) => window.platform_window_id === id
+					)
+					const kittyWindowId = kittyWindow.tabs[0].windows[0].env.KITTY_WINDOW_ID
+					execSync(`kitty @ close-window --match id:${kittyWindowId}`)
+				}
+			}
+		}
+
+		execSync(`yabai -m space --destroy ${space.index}`)
+	}
+}
+
+/**
+ * Rename spaces.
+ * @returns {Promise<void>}
+ */
+const renameSpace = async () => {
+	const spaces = await yabai(['-m', 'query', '--spaces'])
+	const spaceList = spaces.map(
+		(space) => `${space.index}: ${space.label ? space.label : 'untitled'}`
+	)
+	const selectedSpace = await fzf(spaceList, ['--prompt', 'spaces '])
+
+	if (selectedSpace) {
+		const spaceIndex = selectedSpace.split(':')[0]
+		const spaceLabel = await fzf([''], ['--print-query', '--prompt', `rename ${selectedSpace} `])
+
+		if (spaceLabel) {
+			execSync(`yabai -m space ${spaceIndex} --label ${spaceLabel}`)
+		}
+	}
+}
+
+/**
  * Spawn fzf as a child process and return a promise that resolves with the selected item(s).
  * @param {string[]} selections The items to select from.
  * @param {string[]} fzfOptions The options to pass to fzf. See `man fzf` for more info.
@@ -273,49 +322,25 @@ const subpath = (path, n) => {
 	return pathSegments.slice(n).join('/')
 }
 
-/**
- * Select and destroy spaces.
- * @returns {Promise<void>}
- */
-const destroySpace = async () => {
-	const spaces = await yabai(['-m', 'query', '--spaces'])
-	const spaceNames = spaces.map((space) => space.label)
-	const selectedSpace = await fzf(spaceNames, ['--prompt', 'destroy '])
-
-	if (selectedSpace) {
-		const space = spaces.find((space) => space.label === selectedSpace)
-
-		for (const id of space.windows) {
-			const window = await yabai(['-m', 'query', '--windows', `--window`, `${id}`])
-
-			if (window.app !== 'kitty' && !window['is-sticky']) {
-				execSync(`yabai -m window --close ${id}`)
-			} else if (window.app === 'kitty' && !window['is-sticky']) {
-				const kittyWindow = (await kitty(['@', 'ls'])).find(
-					(window) => window.platform_window_id === id
-				)
-				const kittyWindowId = kittyWindow.tabs[0].windows[0].env.KITTY_WINDOW_ID
-				execSync(`kitty @ close-window --match id:${kittyWindowId}`)
-			}
-		}
-
-		execSync(`yabai -m space --destroy ${space.index}`)
-	}
-}
-
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 // ───────────────────────────────────────────── Main ──────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 const main = (async () => {
-	const actions = ['create', 'destroy']
+	const actions = ['create', 'destroy', 'rename']
 
 	const action = await fzf(actions, ['--prompt', 'action '])
 
-	if (action === 'create') {
-		const selectedSpace = await fzf(Object.keys(SPACES), ['--prompt', 'create '])
-		SPACES[selectedSpace]()
-	} else if (action === 'destroy') {
-		await destroySpace()
+	switch (action) {
+		case 'create':
+			const selectedSpace = await fzf(Object.keys(SPACES), ['--prompt', 'create '])
+			SPACES[selectedSpace]()
+			break
+		case 'destroy':
+			await destroySpace()
+			break
+		case 'rename':
+			await renameSpace()
+			break
 	}
 })()
