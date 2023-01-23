@@ -114,7 +114,7 @@ const SPACES = {
 				break
 		}
 
-		newSpace(`develop_${titleFragment}`)
+		newSpace(`dev_${titleFragment}`)
 
 		await kitty(kittyConfig, ['nnn', '-A', '-e'])
 
@@ -214,12 +214,12 @@ const destroySpace = async (spaces) => {
  * @param {Space[]} spaces
  * @returns {Promise<void>}
  */
-const renameSpace = async (spaces) => {
+const nameSpace = async (spaces) => {
 	const selectedSpace = await fzf(getSpaceLabels(spaces), ['--prompt', 'spaces '])
 
 	if (selectedSpace) {
 		const spaceIndex = selectedSpace.split(':')[0]
-		const spaceLabel = await fzf([''], ['--print-query', '--prompt', `rename ${selectedSpace} `])
+		const spaceLabel = await fzf([''], ['--print-query', '--prompt', `name ${selectedSpace} `])
 
 		if (spaceLabel) {
 			execSync(`yabai -m space ${spaceIndex} --label ${spaceLabel}`)
@@ -351,7 +351,7 @@ const subpath = (path, n) => {
 const main = (async () => {
 	const spaces = await getSpaces()
 
-	const actions = ['create', 'destroy', 'rename']
+	const actions = ['create', 'destroy', 'name']
 
 	const action = await fzf(actions, [
 		'--prompt',
@@ -370,8 +370,8 @@ const main = (async () => {
 		case 'destroy':
 			await destroySpace(spaces)
 			break
-		case 'rename':
-			await renameSpace(spaces)
+		case 'name':
+			await nameSpace(spaces)
 			break
 	}
 })()
