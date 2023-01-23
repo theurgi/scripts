@@ -134,12 +134,35 @@ const SPACES = {
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * @typedef {Object} KittyConfig
- * @property {string} title - The title of the new kitty window.
- * @property {string} dir - The directory to open in the new kitty window.
- * @property {string} [env] - The environment variables to set in the new kitty window.
- * @property {string} [cmd] - The command to run in the new kitty window.
+ * @typedef {object} Space
+ * @property {number} id
+ * @property {string} uuid
+ * @property {number} index
+ * @property {string} label
+ * @property {string} type
+ * @property {string} display
+ * @property {number[]} windows
+ * @property {number} first-window
+ * @property {number} last-window
+ * @property {boolean} has-focus
+ * @property {boolean} is-visible
+ * @property {boolean} is-native-fullscreen
  */
+
+/**
+ * Get a list of macOS spaces using yabai.
+ * @returns {Promise<Space[]>}
+ */
+const getSpaces = async () => await yabai(['-m', 'query', '--spaces'])
+
+/**
+ * Get a list of macOS space labels.
+ * @param {Space[]} spaces
+ * @returns {string[]}
+ */
+const getSpaceLabels = (spaces) => {
+	return spaces.map((space) => `${space.index}: ${space.label ? space.label : 'untitled'}`)
+}
 
 /**
  * Create a new macOS space using yabai.
@@ -154,17 +177,18 @@ const newSpace = (name) => {
 
 /**
  * Select and destroy spaces.
+ * @param {Space[]} spaces
  * @returns {Promise<void>}
  */
-const destroySpace = async () => {
-	const spaces = await yabai(['-m', 'query', '--spaces'])
-	const spaceNames = spaces.map((space) => space.label)
-	const selectedSpace = await fzf(spaceNames, ['--prompt', 'destroy '])
+const destroySpace = async (spaces) => {
+	const selectedSpace = await fzf(getSpaceLabels(spaces), ['--prompt', 'destroy '])
 
 	if (selectedSpace) {
-		const space = spaces.find((space) => space.label === selectedSpace)
+		const space = spaces.find((space) => space.label === selectedSpace.split(':')[1].trim())
 
+		// @ts-ignore
 		if (space.windows.length) {
+			// @ts-ignore
 			for (const id of space.windows) {
 				const window = await yabai(['-m', 'query', '--windows', `--window`, `${id}`])
 
@@ -180,20 +204,18 @@ const destroySpace = async () => {
 			}
 		}
 
+		// @ts-ignore
 		execSync(`yabai -m space --destroy ${space.index}`)
 	}
 }
 
 /**
  * Rename spaces.
+ * @param {Space[]} spaces
  * @returns {Promise<void>}
  */
-const renameSpace = async () => {
-	const spaces = await yabai(['-m', 'query', '--spaces'])
-	const spaceList = spaces.map(
-		(space) => `${space.index}: ${space.label ? space.label : 'untitled'}`
-	)
-	const selectedSpace = await fzf(spaceList, ['--prompt', 'spaces '])
+const renameSpace = async (spaces) => {
+	const selectedSpace = await fzf(getSpaceLabels(spaces), ['--prompt', 'spaces '])
 
 	if (selectedSpace) {
 		const spaceIndex = selectedSpace.split(':')[0]
@@ -327,9 +349,18 @@ const subpath = (path, n) => {
 // ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 const main = (async () => {
+	const spaces = await getSpaces()
+
 	const actions = ['create', 'destroy', 'rename']
 
-	const action = await fzf(actions, ['--prompt', 'action '])
+	const action = await fzf(actions, [
+		'--prompt',
+		'action ',
+		'--preview',
+		`echo -e "${getSpaceLabels(spaces).join('\n')}"`,
+		'--preview-label',
+		' spaces ',
+	])
 
 	switch (action) {
 		case 'create':
@@ -337,10 +368,10 @@ const main = (async () => {
 			SPACES[selectedSpace]()
 			break
 		case 'destroy':
-			await destroySpace()
+			await destroySpace(spaces)
 			break
 		case 'rename':
-			await renameSpace()
+			await renameSpace(spaces)
 			break
 	}
 })()
