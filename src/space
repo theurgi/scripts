@@ -103,10 +103,10 @@ const SPACES = {
 
 		switch (editor) {
 			case 'code':
-				kittyConfig = [...kittyConfig, '--env', 'VISUAL=code']
+				kittyConfig = [...kittyConfig, '--env', 'NNN_OPENER=code']
 				break
 			case 'codium':
-				kittyConfig = [...kittyConfig, '--env', 'VISUAL=codium']
+				kittyConfig = [...kittyConfig, '--env', 'NNN_OPENER=codium']
 				break
 		}
 
