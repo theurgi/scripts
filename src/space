@@ -56,10 +56,6 @@ const SPACES = {
 				path: '/Users/user/reap',
 				depth: 4,
 			},
-			scripts: {
-				path: '/Users/user/scripts',
-				depth: 0,
-			},
 		}
 
 		const selectedDirectory = await fzf(Object.keys(directories), ['--prompt', 'directory '])
