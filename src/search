@@ -25,8 +25,10 @@
 
 declare -A SEARCH_ENGINES=(
 	["arch wiki"]="https://wiki.archlinux.org/index.php?search="
+	["brave"]="https://search.brave.com/search?q="
 	["github"]="https://github.com/search?q="
 	["mdn"]="https://developer.mozilla.org/en-US/search?q="
+	["wikipedia"]="https://wikiless.org/wiki/"
 )
 
 main() {
@@ -39,7 +41,7 @@ main() {
 
 	fzf_input=${fzf_input%$'\n'} # Remove the extra newline.
 
-	local selected_engine=$(echo "$fzf_input" | fzf --prompt="search " --reverse)
+	local selected_engine=$(echo "$fzf_input" | sort | fzf --prompt="search " --reverse)
 
 	[[ -z "$selected_engine" ]] && exit 0
 
