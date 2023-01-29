@@ -20,6 +20,9 @@
 // - findutils: https://www.gnu.org/software/findutils/
 //   - brew install findutils
 //   - In .zshrc or .bashrc: export PATH="/usr/local/opt/findutils/libexec/gnubin:$PATH"
+//
+// TODO:
+// - Refactor spawned processes to use buffers.
 
 const { spawn, execSync } = require('child_process')
 const nodePath = require('path')
@@ -93,26 +96,21 @@ const SPACES = {
 		let kittyConfig = [
 			'@',
 			'launch',
+			'--copy-env',
 			'--type',
 			'os-window',
 			'--title',
 			kittyTitle,
 			'--cwd',
 			selectedDirectoryPath,
+			`--env=VISUAL=${editor}`,
+			`--env=EDITOR=${editor}`,
+			`--env=NNN_OPENER=${editor}`,
 		]
-
-		switch (editor) {
-			case 'code':
-				kittyConfig = [...kittyConfig, '--env', 'NNN_OPENER=code']
-				break
-			case 'codium':
-				kittyConfig = [...kittyConfig, '--env', 'NNN_OPENER=codium']
-				break
-		}
 
 		newSpace(`dev_${titleFragment}`)
 
-		await kitty(kittyConfig, ['nnn', '-A', '-e'])
+		await kitty(kittyConfig, ['nnn', '-Ae'])
 
 		execSync(`${editor} -n ${selectedDirectoryPath}`)
 
@@ -308,16 +306,18 @@ const kitty = (args, cmd) => {
 
 	kitty.stdout.setEncoding('utf-8')
 
-	kitty.on('exit', (code) => {
-		if (code) {
-			console.error(`\nkitty exited with code ${code}`)
-			process.exit(code)
-		}
+	// When kitty's output is large, it is split into multiple chunks; if we don't buffer the chunks
+	// before resolving the promise, we'll only receive a portion of the data.
+	// See: https://stackoverflow.com/a/59201092
+	let buffer = []
+
+	kitty.stdout.on('data', (data) => {
+		buffer.push(data)
 	})
 
 	return new Promise((resolve) => {
-		kitty.stdout.on('data', (data) => {
-			resolve(JSON.parse(data))
+		kitty.on('close', () => {
+			resolve(JSON.parse(buffer.join('')))
 		})
 	})
 }
