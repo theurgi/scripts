@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+
+// Sort a markdown file.
+
+const fs = require('fs')
+const path = require('path')
+
+const isHeading = (line) => /^#+/.test(line)
+
+const headingLevel = (line) => {
+	const match = line.match(/^#+/)
+	return match ? match[0].length : 0
+}
+
+const readLine = (line) => {
+	const heading = isHeading(line)
+	const level = headingLevel(line)
+	return { heading, level, text: line }
+}
+
+/**
+ * @typedef {Object} Node
+ * @property {number} level
+ * @property {string} text
+ * @property {Node[]} children
+ * @property {Node[]} lines
+ */
+
+const newNode = (level, text) => ({
+	level,
+	text,
+	children: [],
+	lines: [],
+})
+
+const createTree = (lines) => {
+	const root = newNode(0, null)
+	let current = root
+	let previous = root
+
+	lines.forEach((line) => {
+		const { heading, level, text } = readLine(line)
+
+		if (heading) {
+			if (level > current.level) {
+				previous = current
+				current = newNode(level, text)
+				previous.children.push(current)
+			} else if (level < current.level) {
+				current = previous
+				previous = current.parent
+			} else {
+				current = newNode(level, text)
+				previous.children.push(current)
+			}
+		} else {
+			current.lines.push(line)
+		}
+	})
+
+	return root
+}
+
+const sortTree = (tree) => {
+	tree.children.sort((a, b) => a.text.localeCompare(b.text))
+	tree.children.forEach(sortTree)
+	return tree
+}
+
+const flattenTree = (tree) => {
+	const lines = []
+
+	const flatten = (node) => {
+		if (node.text) lines.push(node.text)
+		node.lines.forEach((line) => lines.push(line))
+		node.children.forEach(flatten)
+	}
+
+	flatten(tree)
+
+	return lines
+}
+
+const writeLines = (lines, outFile) => {
+	const outPath = path.resolve(outFile)
+
+	const output = lines.join('\n')
+
+	const write = (path, output) => {
+		fs.writeFileSync(path, output, 'utf8')
+	}
+
+	write(outPath, output)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────── Main ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+const inFile = process.argv[2]
+const outFile = process.argv[3]
+
+if (!inFile) {
+	console.error('No file specified.')
+	process.exit(1)
+}
+
+const filePath = path.resolve(inFile)
+
+const lines = fs.readFileSync(filePath, 'utf8').split('\n')
+
+const tree = createTree(lines)
+
+const sortedTree = sortTree(tree)
+
+const sortedLines = flattenTree(sortedTree)
+
+if (outFile) {
+	writeLines(sortedLines, outFile)
+} else {
+	writeLines(sortedLines, inFile)
+}

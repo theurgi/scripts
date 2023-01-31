@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+
+# Render a markdown file to HTML and open it in a new tab in Firefox.
+
+input="$1"
+
+output="$(mktemp)"
+
+showdown makehtml -i "$input" -o "$output" -c openLinksInNewWindow &>/dev/null
+
+$FIREFOX --new-tab "$output"
+
+sleep 1
+
+rm "$output"
