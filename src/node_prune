@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+# Reduce the size of node_modules by removing unnecessary files.
+
+if [ -x "$(command -v node-prune)" ]; then
+	node-prune --exclude "*.d.ts" --exclude "tsconfig.json" ./node_modules
+fi
