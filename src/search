@@ -18,17 +18,12 @@
 # Example SEARCH_ENGINES entry:
 #  ["google"]="https://www.google.com/search?q="
 
-# TODO: Uncomment the following colors if they're not defined in your environment.
-# BLUE='\033[0;34m'
-# BOLD='\033[1m'
-# NC='\033[0m'
-
 declare -A SEARCH_ENGINES=(
 	["arch wiki"]="https://wiki.archlinux.org/index.php?search="
 	["brave"]="https://search.brave.com/search?q="
 	["github"]="https://github.com/search?q="
 	["mdn"]="https://developer.mozilla.org/en-US/search?q="
-	["wikipedia"]="https://wikiless.org/wiki/"
+	["wikipedia"]="https://en.wikipedia.org/wiki/"
 )
 
 main() {
@@ -41,18 +36,23 @@ main() {
 
 	fzf_input=${fzf_input%$'\n'} # Remove the extra newline.
 
-	local selected_engine=$(echo "$fzf_input" | sort | fzf --prompt="search " --reverse)
+	local selected_engine=$(
+		echo "$fzf_input" | sort |
+			fzf \
+				--padding=1 \
+				--prompt="search " \
+				--reverse
+	)
 
 	[[ -z "$selected_engine" ]] && exit 0
 
-	prompt=$(echo -e "${BLUE}${BOLD}search $selected_engine${NC} ")
+	query=$(echo "" | fzf \
+		--padding=1 \
+		--print-query \
+		--prompt="$selected_engine " \
+		--reverse)
 
-	# Read in the search query. Exit if the query is empty.
-	clear
-	read -r -p "$prompt" query || exit 0
 	[[ -z "$query" ]] && exit 0
-	[[ "$query" =~ ^[[:space:]]*$ ]] && exit 0
-	clear
 
 	# Trim leading and trailing whitespace.
 	query="${query#"${query%%[![:space:]]*}"}"
